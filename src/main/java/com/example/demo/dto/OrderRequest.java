@@ -8,7 +8,4 @@ import javax.validation.constraints.*;
 public class OrderRequest {
     @NotNull(message = "User ID is required")
     private Long userId;
-
-    @NotEmpty(message = "Item IDs cannot be empty")
-    private Set<@NotNull Long> itemIds;
 }

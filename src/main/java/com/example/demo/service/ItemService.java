@@ -2,6 +2,7 @@ package com.example.demo.service;
 
 import com.example.demo.entity.Item;
 import com.example.demo.entity.Category;
+import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.repository.ItemRepository;
 import com.example.demo.repository.CategoryRepository;
 import com.example.demo.dto.ItemRequest;
@@ -34,7 +35,7 @@ public class ItemService {
         logger.info("Fetching item with ID: {}", id);
         return itemRepo.findById(id).orElseThrow(() -> {
             logger.error("Item with ID {} not found", id);
-            return new RuntimeException("Item not found");
+            return new ResourceNotFoundException("Item not found");
         });
     }
 
@@ -78,7 +79,7 @@ public class ItemService {
             itemRepo.deleteById(id);
         } catch (EmptyResultDataAccessException e) {
             logger.error("Item with ID {} not found for deletion", id);
-            throw new RuntimeException("Item not found");
+            throw new ResourceNotFoundException("Item not found");
         }
     }
 

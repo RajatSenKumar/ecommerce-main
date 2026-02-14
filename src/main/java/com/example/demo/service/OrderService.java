@@ -1,10 +1,9 @@
 package com.example.demo.service;
 
-import com.example.demo.entity.Order;
-import com.example.demo.entity.Item;
-import com.example.demo.entity.User;
+import com.example.demo.entity.*;
+import com.example.demo.exception.ResourceNotFoundException;
+import com.example.demo.repository.CartRepository;
 import com.example.demo.repository.OrderRepository;
-import com.example.demo.repository.ItemRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.dto.OrderRequest;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -22,36 +22,53 @@ public class OrderService {
     private static final Logger logger = LoggerFactory.getLogger(OrderService.class);
 
     private final OrderRepository orderRepo;
-    private final ItemRepository itemRepo;
     private final UserRepository userRepo;
+    private final CartRepository cartRepo;
 
     // Create a new order
     public Order createOrder(OrderRequest request) {
         logger.info("Creating new order for user ID: {}", request.getUserId());
 
-        // Validate the request
-        if (request.getUserId() == null || request.getItemIds() == null || request.getItemIds().isEmpty()) {
-            throw new IllegalArgumentException("User ID and Item IDs are required");
+        User user = userRepo.findById(request.getUserId())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        Cart cart = cartRepo.findByUserId(user.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Cart is empty"));
+
+        if (cart.getItems().isEmpty()) {
+            throw new ResourceNotFoundException("Cart is empty. Cannot place order.");
         }
 
-        User user = userRepo.findById(request.getUserId())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        // Copy items before clearing
+        Set<Item> items = new HashSet<>(cart.getItems());
 
-        Set<Item> items = itemRepo.findAllById(request.getItemIds());
+        // Clear cart
+        cart.getItems().clear();
+
+        // Save cart
+        cartRepo.save(cart);
+
         if (items.isEmpty()) {
             logger.error("No valid items found for the order");
-            throw new RuntimeException("No valid items found for the order");
+            throw new ResourceNotFoundException("No valid items found for the order");
         }
 
         Order order = new Order();
         order.setUser(user);
         order.setItems(items);
-        order.setStatus("PENDING");
+        order.setStatus(OrderStatus.PENDING);
         order.setCreatedAt(LocalDateTime.now());
         order.setUpdatedAt(LocalDateTime.now());
 
-        logger.info("Order created successfully with ID: {}", order.getId());
-        return orderRepo.save(order);
+        Order savedOrder = orderRepo.save(order);
+        logger.info("Order created successfully with ID: {}", savedOrder.getId());
+        return savedOrder;
+    }
+
+    // Get all orders
+    public List<Order> getAllOrders() {
+        logger.info("Fetching all orders");
+        return orderRepo.findAll();
     }
 
     // Get orders by user ID
@@ -66,21 +83,27 @@ public class OrderService {
         return orderRepo.findById(orderId)
                 .orElseThrow(() -> {
                     logger.error("Order with ID {} not found", orderId);
-                    return new RuntimeException("Order not found");
+                    return new ResourceNotFoundException("Order not found");
                 });
     }
 
     // Update order status
-    public Order updateOrderStatus(Long orderId, String status) {
+    public Order updateOrderStatus(Long orderId, OrderStatus status) {
         logger.info("Updating status of order ID: {} to {}", orderId, status);
 
         // Validate status
-        if (status == null || status.isEmpty()) {
+        if (status == null) {
             throw new IllegalArgumentException("Status is required");
         }
 
         Order order = getOrder(orderId);
-        order.setStatus(status);
+        try {
+            order.setStatus(status);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException(
+                    "Invalid status. Allowed values: PENDING, SHIPPED, DELIVERED, CANCELLED"
+            );
+        }
         order.setUpdatedAt(LocalDateTime.now());
         return orderRepo.save(order);
     }
@@ -90,7 +113,7 @@ public class OrderService {
         logger.info("Canceling order with ID: {}", orderId);
 
         Order order = getOrder(orderId);
-        order.setStatus("CANCELLED");
+        order.setStatus(OrderStatus.CANCELLED);
         order.setUpdatedAt(LocalDateTime.now());
         orderRepo.save(order);
 

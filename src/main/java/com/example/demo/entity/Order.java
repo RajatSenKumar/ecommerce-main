@@ -31,8 +31,9 @@ public class Order {
     private Set<Item> items;
 
     @NotNull(message = "Status cannot be null")
-    @Pattern(regexp = "PENDING|SHIPPED|DELIVERED|CANCELLED", message = "Invalid status value")
-    private String status;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private OrderStatus status;
 
     @NotNull
     private LocalDateTime createdAt;
